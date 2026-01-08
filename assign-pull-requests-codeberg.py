@@ -327,16 +327,15 @@ def assign_one(
             # codeberg.org URLs in the "See Also" field (or any URL).
             # bug 964700
 
-            # updq = bz.build_update(
-            #     keywords_add=['PullRequest'],
-            #     see_also_add=[pr['url']]
-            # )
-            # try:
-            #     bz.update_bugs(real_bugs_ids, updq)
-            # except xmlrpcclient.Fault as e:
-            #     if e.faultCode != 101:
-            #         raise
-            #     # non-existing bugs that were linked should already have been dealt with
+            updq = bz.build_update(
+                keywords_add=["PullRequest"], see_also_add=[pr["url"]]
+            )
+            try:
+                bz.update_bugs(real_bugs_ids, updq)
+            except xmlrpcclient.Fault as e:
+                if e.faultCode != 101:
+                    raise
+                # non-existing bugs that were linked should already have been dealt with
 
         # match security@, security-audit@, and security-kernel@
         security = any(
