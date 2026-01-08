@@ -30,17 +30,20 @@ class CodebergAPI:
 
     def pulls(self) -> Generator[None, dict, None]:
         next_url = f"{self.repos_baseurl}/pulls?state=open"
-        while next_url:
+        while True:
             r = self.session.get(next_url)
             yield from r.json()
-            next_url = (x := r.links.get("next")) and x["url"]
+            x = r.links.get("next")
+            if not x:
+                break
+            next_url = x["url"]
 
-    def set_pr_title(self, pr_id: int, title: str):
+    def set_pr_title(self, pr_id: int, title: str) -> None:
         self.session.patch(
             f"{self.repos_baseurl}/pulls/{pr_id}", json={"title": title}
         )
 
-    def add_pr_labels(self, pr_id: int, labels: list[int]):
+    def add_pr_labels(self, pr_id: int, labels: list[int]) -> None:
         self.session.patch(
             f"{self.repos_baseurl}/pulls/{pr_id}", json=({"labels": labels})
         )
@@ -57,7 +60,7 @@ class CodebergAPI:
     def get_reviews(self, pr_id: int) -> list[dict]:
         return self.session.get(f"{self.repos_baseurl}/pulls/{pr_id}/reviews").json()
 
-    def create_review(self, pr_id: int, comment: str):
+    def create_review(self, pr_id: int, comment: str) -> None:
         # Does not appear to be possible to simply post comments
         # https://codeberg.org/api/swagger#/repository/repoCreatePullReview
         self.session.post(
@@ -67,5 +70,5 @@ class CodebergAPI:
             },
         )
 
-    def delete_review(self, pr_id: int, review_id: int):
+    def delete_review(self, pr_id: int, review_id: int) -> None:
         self.session.delete(f"{self.repos_baseurl}/pulls/{pr_id}/reviews/{review_id}")
