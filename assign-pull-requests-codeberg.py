@@ -7,20 +7,12 @@ import socket
 import email.utils
 import json
 import os
+import os.path
 import sys
 import re
 import lxml.etree
-
-try:
-    import urllib.request as urllib
-except ImportError:
-    import urllib
-try:
-    import xmlrpc.client as xmlrpcclient
-except ImportError:
-    import xmlrpclib as xmlrpcclient
-
-from os import path
+import urllib.request as urllib
+import xmlrpc.client as xmlrpcclient
 
 from codebergapi import CodebergAPI
 
@@ -228,7 +220,7 @@ def assign_one(
     if packages:
         pkg_maints = {}
         for p in packages:
-            ppath = path.join(ref_repo_path, p, "metadata.xml")
+            ppath = os.path.join(ref_repo_path, p, "metadata.xml")
             try:
                 metadata_xml = lxml.etree.parse(ppath)
             except (OSError, IOError):
@@ -445,13 +437,7 @@ def main(repo_path):
     with open(BUGZILLA_APIKEY_FILE) as f:
         bugz_apikey = f.read().strip()
 
-    repo = CodebergAPI(owner, repo, token)
     bz = bugzilla.Bugzilla(BUGZILLA_URL, api_key=bugz_apikey)
-
-    pulls = repo.pulls()
-    labels = repo.labels()
-
-    label_mapping = {l["name"]: l["id"] for l in labels}
 
     with open(CODEBERG_PROXIED_MAINT_MAPPING) as f:
         dev_mapping = json.load(f)
@@ -459,24 +445,28 @@ def main(repo_path):
         dev_mapping.update(json.load(f))
     with open(CODEBERG_PROJ_MAPPING) as f:
         proj_mapping = json.load(f)
-    with open(path.join(repo_path, "profiles/categories")) as f:
+    with open(os.path.join(repo_path, "profiles/categories")) as f:
         categories = [l.strip() for l in f.read().splitlines()]
 
-    for pr in pulls:
-        assign_one(
-            repo,
-            pr,
-            categories,
-            dev_mapping,
-            proj_mapping,
-            CODEBERG_USERNAME,
-            repo_path,
-            label_mapping,
-            bz,
-            BUGZILLA_URL,
-        )
+    with CodebergAPI(owner, repo, token) as repo:
+        pulls = repo.pulls()
+        labels = repo.labels()
 
-    repo.close()
+        label_mapping = {l["name"]: l["id"] for l in labels}
+
+        for pr in pulls:
+            assign_one(
+                repo,
+                pr,
+                categories,
+                dev_mapping,
+                proj_mapping,
+                CODEBERG_USERNAME,
+                repo_path,
+                label_mapping,
+                bz,
+                BUGZILLA_URL,
+            )
 
 
 if __name__ == "__main__":
