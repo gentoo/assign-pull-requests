@@ -4,7 +4,6 @@
 # (c) 2017-2018 Michał Górny, 2-clause BSD licensed
 
 import bugzilla
-import email.utils
 import json
 import os
 import os.path
@@ -125,28 +124,6 @@ def main(ref_repo_path):
                 GITHUB_USERNAME, ref_repo_path, bz, BUGZILLA_URL)
 
     return 0
-
-
-def commit_contains_correct_signoff(commit):
-    """Verify the commit contains a correct sign-off.
-
-    Given a commit, it is considered to contain a correct sign-off IFF:
-    It has a footer line starting with 'Signed-off-by: '
-    AND that line contains the email address of the committer.
-
-    Other sign-off lines MAY also be present, but do not affect the outcome of
-    this check. It's entirely valid for one person to have multiple sign-off
-    lines, using different email addresses (signing off on something for both
-    work and Gentoo development).
-    """
-    committer_email = commit.committer.email.lower()  # case insensitive
-    for line in commit.message.splitlines():
-        lower_line = line.lower()
-        if lower_line.startswith('signed-off-by:'):
-            _, signed_email = email.utils.parseaddr(lower_line)
-            if signed_email == committer_email:
-                return True
-    return False
 
 
 def assign_one(pr_getter, issue, dev_mapping, proj_mapping, categories,
@@ -368,11 +345,12 @@ def assign_one(pr_getter, issue, dev_mapping, proj_mapping, categories,
                 body += '\n- %s' % m
             body += '\n\nPlease either fix the e-mail addresses in metadata.xml or create a Bugzilla account, and request reassignment afterwards.'
 
-    # every commit must contain a correct signoff
-    missing_signoff = not all(commit_contains_correct_signoff(c) for c in pr.get_commits())
-
+    # check for GCO sign-off
+    missing_signoff = any(
+        not any(x.startswith('Signed-off-by:') for x in c.commit.message.splitlines())
+        for c in pr.get_commits())
     if missing_signoff:
-        body += '\n\n## Missing GCO sign-off\n\nPlease read the terms of [Gentoo Certificate of Origin](https://www.gentoo.org/glep/glep-0076.html#certificate-of-origin) and acknowledge them by adding a sign-off to *all* your commits. The sign-off MUST include the email address of the git committer.'
+        body += '\n\n## Missing GCO sign-off\n\nPlease read the terms of [Gentoo Certificate of Origin](https://www.gentoo.org/glep/glep-0076.html#certificate-of-origin) and acknowledge them by adding a sign-off to *all* your commits.'
 
     body += '\n\n---\nIn order to force reassignment and/or bug reference scan, please append `[please reassign]` to the pull request title.\n\n*Docs*: [Code of Conduct](https://wiki.gentoo.org/wiki/Project:Council/Code_of_conduct) ● [Copyright policy](https://www.gentoo.org/glep/glep-0076.html) ([expl.](https://dev.gentoo.org/~mgorny/articles/new-gentoo-copyright-policy-explained.html)) ● [Devmanual](https://devmanual.gentoo.org/) ● [GitHub PRs](https://wiki.gentoo.org/wiki/Project:GitHub/Pull_requests) ● [Proxy-maint guide](https://wiki.gentoo.org/wiki/Project:Proxy_Maintainers/User_Guide)'
 
