@@ -138,13 +138,17 @@ def scanfiles(filelist, categories):
     return areas, packages, metadata_xml_files
 
 
-def delete_old_review(repo, pr_id, codeberg_username):
-    reviews = repo.get_reviews(pr_id)
+def delete_old_assignment(repo, pr_id, codeberg_username):
+    comments = repo.get_comments(pr_id)
+    to_remove = []
 
-    for rv in reviews:
-        if rv["user"]["login"] == codeberg_username:
-            if "Pull Request assignment" in rv["body"]:
-                repo.delete_review(pr_id, rv["id"])
+    for c in comments:
+        if c["user"]["login"] == codeberg_username:
+            if "Pull Request assignment" in c["body"]:
+                to_remove.append(c["id"])
+
+    for c_id in to_remove:
+        repo.delete_comment(c_id)
 
 
 def assign_one(
@@ -185,7 +189,7 @@ def assign_one(
         assignee_limit = 9999
         bug_limit = 9999
 
-    delete_old_review(repo, pr_id, codeberg_username)
+    delete_old_assignment(repo, pr_id, codeberg_username)
 
     commits = repo.commits(pr_id)
     files = repo.files(pr_id)
@@ -368,7 +372,7 @@ def assign_one(
     body += "\n\n---\nIn order to force reassignment and/or bug reference scan, please append `[please reassign]` to the pull request title.\n\n*Docs*: [Code of Conduct](https://wiki.gentoo.org/wiki/Project:Council/Code_of_conduct) ● [Copyright policy](https://www.gentoo.org/glep/glep-0076.html) ([expl.](https://dev.gentoo.org/~mgorny/articles/new-gentoo-copyright-policy-explained.html)) ● [Devmanual](https://devmanual.gentoo.org/) ● [Codeberg PRs](https://wiki.gentoo.org/wiki/Project:Codeberg/Pull_requests) ● [Proxy-maint guide](https://wiki.gentoo.org/wiki/Project:Proxy_Maintainers/User_Guide)"
 
     # finally! post comment...
-    repo.create_review(pr_id, body)
+    repo.create_comment(pr_id, body)
 
     updated_labels = []
     for l in pr["labels"]:
