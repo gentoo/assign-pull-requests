@@ -369,6 +369,9 @@ def assign_one(
     if missing_signoff:
         body += "\n\n## Missing GCO sign-off\n\nPlease read the terms of [Gentoo Certificate of Origin](https://www.gentoo.org/glep/glep-0076.html#certificate-of-origin) and acknowledge them by adding a sign-off to *all* your commits. The sign-off MUST include the email address of the git committer."
 
+    if pr["flow"] == 0:
+        body += "\n\n## Not using AGit\n\nThis Pull Request is not using the [AGit](https://forgejo.org/docs/latest/user/agit-support/) workflow. If you are maintaining a fork of this repository solely for opening pull requests, consider switching to the AGit workflow as it is more space-efficient (and delete the fork)."
+
     body += "\n\n---\nIn order to force reassignment and/or bug reference scan, please append `[please reassign]` to the pull request title.\n\n*Docs*: [Code of Conduct](https://wiki.gentoo.org/wiki/Project:Council/Code_of_conduct) ● [Copyright policy](https://www.gentoo.org/glep/glep-0076.html) ([expl.](https://dev.gentoo.org/~mgorny/articles/new-gentoo-copyright-policy-explained.html)) ● [Devmanual](https://devmanual.gentoo.org/) ● [Codeberg PRs](https://wiki.gentoo.org/wiki/Project:Codeberg/Pull_requests) ● [Proxy-maint guide](https://wiki.gentoo.org/wiki/Project:Proxy_Maintainers/User_Guide)"
 
     # finally! post comment...
