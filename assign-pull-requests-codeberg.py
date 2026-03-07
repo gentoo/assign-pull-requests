@@ -139,10 +139,9 @@ def scanfiles(filelist, categories):
 
 
 def delete_old_assignment(repo, pr_id, codeberg_username):
-    comments = repo.get_comments(pr_id)
     to_remove = []
 
-    for c in comments:
+    for c in repo.get_comments(pr_id):
         if c["user"]["login"] == codeberg_username:
             if "Pull Request assignment" in c["body"]:
                 to_remove.append(c["id"])
@@ -191,7 +190,7 @@ def assign_one(
 
     delete_old_assignment(repo, pr_id, codeberg_username)
 
-    commits = repo.commits(pr_id)
+    commits = list(repo.commits(pr_id))
     files = repo.files(pr_id)
 
     # look through files in the PR to determine the areas affected
@@ -456,9 +455,7 @@ def main(repo_path):
 
     with CodebergAPI(owner, repo, token) as repo:
         pulls = repo.pulls()
-        labels = repo.labels()
-
-        label_mapping = {l["name"]: l["id"] for l in labels}
+        label_mapping = {l["name"]: l["id"] for l in repo.labels()}
 
         for pr in pulls:
             assign_one(
