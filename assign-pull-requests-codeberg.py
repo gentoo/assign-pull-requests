@@ -308,42 +308,37 @@ def assign_one(
 
     body += "\n\n## Linked bugs"
     if bugs:
-        if len(bugs) > bug_limit:
-            buglinks = ", ".join(f"[{x}]({bugzilla_url}/{x})" for x in bugs)
-            body += f"\nBugs linked: {buglinks}"
-            body += "\nCross-linking bugs disabled due to large number of bugs linked."
-        else:
-            real_bugs = bz.getbugs(list(bugs), include_fields=["assigned_to"])
-            real_bugs_ids = [bug.id for bug in real_bugs]
-            invalid_bugs = bugs.difference(set(real_bugs_ids))
-
-            if real_bugs_ids:
-                buglinks = ", ".join(
-                    f"[{x}]({bugzilla_url}/{x})" for x in real_bugs_ids
-                )
-                body += f"\nBugs linked: {buglinks}"
-            if invalid_bugs:
-                invalid_bug_linked = True
-                body += f"\n\n**The following linked bugs do not exist!** {', '.join(str(b) for b in invalid_bugs)}"
-
-            # FIXME: This is disabled until bugs.gentoo.org supports
-            # codeberg.org URLs in the "See Also" field (or any URL).
-            # bug 964700
-
-            updq = bz.build_update(
-                keywords_add=["PullRequest"], see_also_add=[pr["url"]]
+        real_bugs = bz.getbugs(list(bugs), include_fields=["assigned_to"])
+        if real_bugs:
+            buglinks = ", ".join(
+                f"[{bug.id}]({bugzilla_url}/{bug.id})" for bug in real_bugs
             )
-            try:
-                bz.update_bugs(real_bugs_ids, updq)
-            except xmlrpcclient.Fault as e:
-                if e.faultCode != 101:
-                    raise
-                # non-existing bugs that were linked should already have been dealt with
+            body += f"\nBugs linked: {buglinks}"
+            if len(real_bugs) > bug_limit:
+                body += (
+                    "\nCross-linking bugs disabled due to large number of bugs linked."
+                )
+            else:
+                updq = bz.build_update(
+                    keywords_add=["PullRequest"], see_also_add=[pr["url"]]
+                )
+                try:
+                    bz.update_bugs([bug.id for bug in real_bugs], updq)
+                except xmlrpcclient.Fault as e:
+                    if e.faultCode != 101:
+                        raise
 
-        # match security@, security-audit@, and security-kernel@
-        security = any(
-            bug.assigned_to_detail["id"] in [2546, 23358, 25934] for bug in real_bugs
-        )
+            # match security@, security-audit@, and security-kernel@
+            security = any(
+                bug.assigned_to_detail["id"] in [2546, 23358, 25934]
+                for bug in real_bugs
+            )
+
+        invalid_bugs = bugs.difference(set(bug.id for bug in real_bugs))
+        if invalid_bugs:
+            invalid_bug_linked = True
+            body += f"\n\n**The following linked bugs do not exist!** {', '.join(str(b) for b in invalid_bugs)}"
+
     else:
         body += "\n\nNo bugs to link found. If your pull request references any of the Gentoo bug reports, please add appropriate [GLEP 66](https://www.gentoo.org/glep/glep-0066.html#commit-messages) tags to the commit message and request reassignment."
 
