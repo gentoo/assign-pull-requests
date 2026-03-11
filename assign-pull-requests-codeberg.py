@@ -345,7 +345,7 @@ def assign_one(
     if existing_package and not self_maintained and not bugs:
         body += "\n\n**If you do not receive any reply to this pull request, please open or link a bug to attract the attention of maintainers**"
 
-    if not existing_package:
+    if packages and not existing_package:
         body += "\n\n## New packages\nThis Pull Request appears to be introducing new packages only. Due to limited manpower, adding new packages is considered low priority. This does not mean that your pull request will not receive any attention, however, it might take quite some time for it to be reviewed. In the meantime, your new ebuild might find a home in the [GURU project repository](https://wiki.gentoo.org/wiki/Project:GURU): the ebuild repository maintained collaboratively by Gentoo users. GURU offers your ebuild a place to be reviewed and improved by other Gentoo users, while making it easy for Gentoo users to install it and enjoy the software it adds."
 
     # Verify maintainers for invalid addresses
