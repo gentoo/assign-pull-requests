@@ -249,7 +249,7 @@ def assign_one(
                     # mapping is email -> codeberg handle
                     if m.get("type") == "project":
                         ms = map_proj(memail, proj_mapping)
-                        team = map_proj_team(proj, proj_mapping)
+                        team = map_proj_team(memail, proj_mapping)
                         if team is not None:
                             team_reviewers.add(team)
                     else:
