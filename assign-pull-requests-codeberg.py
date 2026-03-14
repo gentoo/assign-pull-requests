@@ -172,6 +172,7 @@ def assign_one(
     bug_limit = 5
     body = pr["body"]
     pr_id = pr["number"]
+    pr_submitter = pr["user"]["login"]
 
     # Check if we are to reassign
     if "[please reassign]" in pr["title"].lower():
@@ -206,7 +207,7 @@ def assign_one(
 
     body = f"""## Pull Request assignment
 
-*Submitter*: @{pr["user"]["login"]}
+*Submitter*: @{pr_submitter}
 *Areas affected*: {", ".join(sorted(areas)) or "(none, wtf?)"}
 *Packages affected*: {", ".join(sorted(packages)[:5]) or "(none)"}{", ..." if len(packages) > 5 else ""}
 """
@@ -216,7 +217,7 @@ def assign_one(
     cant_assign = False
     # if for at least one package, the user is not in maintainers, we
     # do not consider it self-maintained
-    self_maintained = True
+    self_maintained = False
     invalid_email = False
     existing_package = False
     maint_needed = False
@@ -224,6 +225,7 @@ def assign_one(
     invalid_bug_linked = False
     unique_maints = set()
     totally_all_maints = set()
+    reviewers = set()
     team_reviewers = set()
 
     # TODO Try to determine unique set of maintainers
@@ -254,6 +256,11 @@ def assign_one(
                             team_reviewers.add(team)
                     else:
                         ms = map_dev(memail, dev_mapping)
+                        if u := dev_mapping.get(memail.lower()):
+                            if u == pr_submitter:
+                                self_maintained = True
+                            else:
+                                reviewers.add(u)
 
                     for subm in m:
                         if m.tag == "description" and m.get("lang", "en") == "en":
@@ -266,8 +273,6 @@ def assign_one(
 
                     pkg_maints[p] = all_ms
 
-                    if "@" + pr["user"]["login"] not in all_ms:
-                        self_maintained = False
                     unique_maints.add(tuple(sorted(all_ms)))
                     if len(unique_maints) > assignee_limit:
                         break
@@ -384,7 +389,9 @@ def assign_one(
 
     # finally! post comment...
     repo.create_comment(pr_id, body)
-    repo.request_review(pr_id, team_reviewers=list(team_reviewers))
+    repo.request_review(
+        pr_id, reviewers=list(reviewers), team_reviewers=list(team_reviewers)
+    )
 
     updated_labels = []
     for l in pr["labels"]:
