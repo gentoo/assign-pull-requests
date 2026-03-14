@@ -43,6 +43,12 @@ def map_proj(proj, proj_mapping):
     return "~~[%s (project)]~~" % proj
 
 
+def map_proj_team(proj, proj_mapping):
+    if proj.lower() in proj_mapping:
+        return proj_mapping[proj.lower()].lower().removeprefix("gentoo/")
+    return None
+
+
 def bugz_user_query(mails, bz):
     return bz.getusers(mails)
 
@@ -218,6 +224,7 @@ def assign_one(
     invalid_bug_linked = False
     unique_maints = set()
     totally_all_maints = set()
+    team_reviewers = set()
 
     # TODO Try to determine unique set of maintainers
     if packages:
@@ -228,6 +235,7 @@ def assign_one(
                 metadata_xml = lxml.etree.parse(ppath)
             except (OSError, IOError):
                 pkg_maints[p] = ["@gentoo/proxy-maint (new package)"]
+                team_reviewers.add("proxy-maint")
                 new_package = True
             else:
                 existing_package = True
@@ -241,6 +249,9 @@ def assign_one(
                     # mapping is email -> codeberg handle
                     if m.get("type") == "project":
                         ms = map_proj(memail, proj_mapping)
+                        team = map_proj_team(proj, proj_mapping)
+                        if team is not None:
+                            team_reviewers.add(team)
                     else:
                         ms = map_dev(memail, dev_mapping)
 
@@ -263,11 +274,13 @@ def assign_one(
                 else:
                     # maintainer-needed!
                     pkg_maints[p] = ["@gentoo/proxy-maint (maintainer needed)"]
+                    team_reviewers.add("proxy-maint")
                     maint_needed = True
 
         if len(unique_maints) > assignee_limit:
             cant_assign = True
             body += "\n@gentoo/codeberg: Too many disjoint maintainers, disabling auto-assignment."
+            team_reviewers.add("codeberg")
         else:
             for p in sorted(packages):
                 body += "\n**%s**: %s" % (p, ", ".join(pkg_maints[p]))
@@ -276,6 +289,7 @@ def assign_one(
     else:
         cant_assign = True
         body += "\n@gentoo/codeberg"
+        team_reviewers.add("codeberg")
 
     if len(unique_maints) > assignee_limit:
         totally_all_maints = set()
@@ -370,6 +384,7 @@ def assign_one(
 
     # finally! post comment...
     repo.create_comment(pr_id, body)
+    repo.request_review(pr_id, team_reviewers=list(team_reviewers))
 
     updated_labels = []
     for l in pr["labels"]:
