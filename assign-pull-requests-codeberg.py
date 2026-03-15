@@ -351,6 +351,8 @@ def assign_one(
                 bug.assigned_to_detail["id"] in [2546, 23358, 25934]
                 for bug in real_bugs
             )
+            if security:
+                team_reviewers.add("security")
 
         invalid_bugs = bugs.difference(set(bug.id for bug in real_bugs))
         if invalid_bugs:
