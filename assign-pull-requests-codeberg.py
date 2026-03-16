@@ -256,8 +256,8 @@ def assign_one(
                             team_reviewers.add(team)
                     else:
                         ms = map_dev(memail, dev_mapping)
-                        u = dev_mapping.get(memail.lower())
-                        if u not in (None, pr_submitter):
+                        u = dev_mapping.get(memail.lower(), "")
+                        if u not in ("", pr_submitter):
                             reviewers.add(u)
 
                     for subm in m:
