@@ -40,7 +40,7 @@ def map_proj(proj, proj_mapping):
         proj = proj[: -len("@gentoo.org")]
     else:
         proj = proj.replace("@", "[at]")
-    return "~~[%s (project)]~~" % proj
+    return f"~~[{proj} (project)]~~"
 
 
 def map_proj_team(proj, proj_mapping):
@@ -288,7 +288,7 @@ def assign_one(
             team_reviewers.add("codeberg")
         else:
             for p in sorted(packages):
-                body += "\n**%s**: %s" % (p, ", ".join(pkg_maints[p]))
+                body += f"\n**{p}**: {', '.join(pkg_maints[p])}"
             if cant_assign:
                 body += "\n\nAt least one of the listed packages is maintained entirely by non-Codeberg developers!"
     else:
