@@ -112,6 +112,7 @@ def scanfiles(filelist, categories):
     areas = set()
     packages = set()
     metadata_xml_files = set()
+    eclasses = set()
 
     for f in filelist:
         path = f["filename"].split("/")
@@ -127,6 +128,8 @@ def scanfiles(filelist, categories):
                 packages.add("/".join(path[0:2]))
         elif path[0] == "eclass":
             areas.add("eclasses")
+            if path[1].endswith(".eclass"):
+                eclasses.add(path[1].removesuffix(".eclass"))
         elif path[0] == "profiles":
             if path[1] != "use.local.desc":
                 areas.add("profiles")
@@ -136,7 +139,33 @@ def scanfiles(filelist, categories):
         else:
             areas.add("other files")
 
-    return areas, packages, metadata_xml_files
+    return areas, packages, metadata_xml_files, eclasses
+
+
+def parse_eclass_maintainers(epath: Path):
+    if not epath.exists():
+        return []
+    with open(epath, "r") as eclass:
+        it = iter(eclass)
+        for l in it:
+            if l.lstrip().startswith("# @MAINTAINER:"):
+                break
+        else:
+            return []
+
+        eclass_maintainers = []
+        for l in it:
+            # format is either "email", or "author <email>"
+            if l.strip().startswith("# @"):
+                break
+            if m := re.match(r"^# .* <(.*)>$", l.strip()):
+                memail = m.group(1)
+            elif m := re.match(r"^# *(.+@.+)$", l.strip()):
+                memail = m.group(1)
+            else:
+                break
+            eclass_maintainers.append(memail)
+        return eclass_maintainers
 
 
 def delete_old_assignment(repo, pr_id, codeberg_username):
@@ -196,7 +225,7 @@ def assign_one(
     files = repo.files(pr_id)
 
     # look through files in the PR to determine the areas affected
-    areas, packages, metadata_xml_files = scanfiles(files, categories)
+    areas, packages, metadata_xml_files, eclasses = scanfiles(files, categories)
 
     # Begin building our comment...
 
@@ -204,6 +233,7 @@ def assign_one(
 
 *Submitter*: @{pr_submitter}
 *Areas affected*: {", ".join(sorted(areas)) or "(none, wtf?)"}
+*Eclasses affected*: {", ".join(sorted(eclasses)[:5]) or "(none)"}{", ..." if len(eclasses) > 5 else ""}
 *Packages affected*: {", ".join(sorted(packages)[:5]) or "(none)"}{", ..." if len(packages) > 5 else ""}
 """
 
@@ -222,6 +252,45 @@ def assign_one(
     totally_all_maints = set()
     reviewers = set()
     team_reviewers = set()
+
+    if eclasses:
+        for eclass in eclasses:
+            # For each identified eclass, we want to parse out the
+            # @MAINTAINERS: lines, and add lines to the comment body
+            # with maintainers.
+            #
+            # The challenge here is that there's no indication if
+            # listed maintainers are projects or individuals, so we
+            # need to try both.
+            epath = (ref_repo_path / "eclass" / eclass).with_suffix(".eclass")
+            eclass_maint = parse_eclass_maintainers(epath)
+            eclass_ms = []
+            for memail in eclass_maint:
+                dev = dev_mapping.get(memail.lower())
+                if dev:
+                    ms = f"@{dev}"
+                    eclass_ms.append(ms)
+                    if dev != pr_submitter:
+                        reviewers.add(dev)
+                    continue
+                team = proj_mapping.get(memail.lower())
+                if team:
+                    ms = f"@{team}"
+                    eclass_ms.append(ms)
+                    team_reviewers.add(team.removeprefix("gentoo/"))
+                    continue
+                # failed to match anything
+                if memail.endswith("@gentoo.org"):
+                    ms = memail[: -len("@gentoo.org")]
+                else:
+                    ms = memail[: -len("@gentoo.org")]
+                eclass_ms.append(f"~~{ms}~~")
+
+            if not eclass_ms:
+                eclass_ms.append("@gentoo/proxy-maint (maintainer needed)")
+                team_reviewers.add("proxy-maint")
+
+            body += f"\n**{eclass}.eclass**: {', '.join(eclass_ms)}"
 
     # TODO Try to determine unique set of maintainers
     if packages:
@@ -284,7 +353,8 @@ def assign_one(
                 body += f"\n**{p}**: {', '.join(pkg_maints[p])}"
             if cant_assign:
                 body += "\n\nAt least one of the listed packages is maintained entirely by non-Codeberg developers!"
-    else:
+
+    if not (eclasses or packages):
         cant_assign = True
         body += "\n@gentoo/codeberg"
         team_reviewers.add("codeberg")
