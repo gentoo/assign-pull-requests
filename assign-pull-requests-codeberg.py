@@ -25,28 +25,23 @@ BUG_SHORT_URL_RE = re.compile(r"https?://bugs\.gentoo\.org/(\d+)(?:[?#].*)?$")
 
 def map_dev(dev, dev_mapping):
     if d := dev_mapping.get(dev.lower()):
-        return f"@{d}"
+        return f"@{d}", d
     if dev.endswith("@gentoo.org"):
         dev = dev[: -len("@gentoo.org")]
     else:
         dev = dev.replace("@", "[at]")
-    return f"~~{dev}~~"
+    return f"~~{dev}~~", None
 
 
 def map_proj(proj, proj_mapping):
-    if proj.lower() in proj_mapping:
-        return "@" + proj_mapping[proj.lower()].lower()
+    if p := proj_mapping.get(proj.lower()):
+        p = p.lower()
+        return f"@{p}", p.removeprefix("gentoo/")
     if proj.endswith("@gentoo.org"):
         proj = proj[: -len("@gentoo.org")]
     else:
         proj = proj.replace("@", "[at]")
-    return f"~~[{proj} (project)]~~"
-
-
-def map_proj_team(proj, proj_mapping):
-    if proj.lower() in proj_mapping:
-        return proj_mapping[proj.lower()].lower().removeprefix("gentoo/")
-    return None
+    return f"~~[{proj} (project)]~~", None
 
 
 def bugz_user_query(mails, bz):
@@ -250,15 +245,13 @@ def assign_one(
                     # map the maintainer to their codeberg handle
                     # mapping is email -> codeberg handle
                     if m.get("type") == "project":
-                        ms = map_proj(memail, proj_mapping)
-                        team = map_proj_team(memail, proj_mapping)
+                        ms, team = map_proj(memail, proj_mapping)
                         if team is not None:
                             team_reviewers.add(team)
                     else:
-                        ms = map_dev(memail, dev_mapping)
-                        u = dev_mapping.get(memail.lower(), "")
-                        if u not in ("", pr_submitter):
-                            reviewers.add(u)
+                        ms, user = map_dev(memail, dev_mapping)
+                        if user not in (None, pr_submitter):
+                            reviewers.add(user)
 
                     for subm in m:
                         if m.tag == "description" and m.get("lang", "en") == "en":
