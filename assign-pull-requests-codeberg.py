@@ -14,6 +14,7 @@ import urllib.request
 import urllib.error
 import xmlrpc.client as xmlrpcclient
 from pathlib import Path
+from itertools import chain
 
 from codebergapi import CodebergAPI
 
@@ -24,25 +25,17 @@ BUG_LONG_URL_RE = re.compile(
 BUG_SHORT_URL_RE = re.compile(r"https?://bugs\.gentoo\.org/(\d+)(?:[?#].*)?$")
 
 
-def map_dev(dev, dev_mapping):
-    if d := dev_mapping.get(dev.lower()):
+def map_email(email, dev_mapping, proj_mapping):
+    if d := dev_mapping.get(email.lower()):
         return f"@{d}", d
-    if dev.endswith("@gentoo.org"):
-        dev = dev[: -len("@gentoo.org")]
-    else:
-        dev = dev.replace("@", "[at]")
-    return f"~~{dev}~~", None
-
-
-def map_proj(proj, proj_mapping):
-    if p := proj_mapping.get(proj.lower()):
-        p = p.lower()
+    elif p := proj_mapping.get(email.lower()):
         return f"@{p}", p.removeprefix("gentoo/")
-    if proj.endswith("@gentoo.org"):
-        proj = proj[: -len("@gentoo.org")]
+
+    if email.endswith("@gentoo.org"):
+        m = email[: -len("@gentoo.org")]
     else:
-        proj = proj.replace("@", "[at]")
-    return f"~~[{proj} (project)]~~", None
+        m = email.replace("@", "[at]")
+    return f"~~{m}~~", None
 
 
 def bugz_user_query(mails, bz):
@@ -113,6 +106,7 @@ def scanfiles(filelist, categories):
     areas = set()
     packages = set()
     metadata_xml_files = set()
+    eclasses = set()
 
     for f in filelist:
         path = f["filename"].split("/")
@@ -125,9 +119,11 @@ def scanfiles(filelist, categories):
             else:
                 if path[2] == "metadata.xml":
                     metadata_xml_files.add(f["raw_url"])
-                packages.add("/".join(path[0:2]))
+                packages.add(Path("/".join(path[0:2])))
         elif path[0] == "eclass":
             areas.add("eclasses")
+            if path[1].endswith(".eclass"):
+                eclasses.add(Path("/".join(path[0:2])))
         elif path[0] == "profiles":
             if path[1] != "use.local.desc":
                 areas.add("profiles")
@@ -137,7 +133,43 @@ def scanfiles(filelist, categories):
         else:
             areas.add("other files")
 
-    return areas, packages, metadata_xml_files
+    return areas, sorted(packages), metadata_xml_files, sorted(eclasses)
+
+
+def get_eclass_emails(epath: Path):
+    try:
+        with open(epath, "r") as eclass:
+            it = iter(eclass)
+            for l in it:
+                if l.strip().startswith("# @MAINTAINER:"):
+                    break
+            else:
+                return [], False
+
+            eclass_maintainers = []
+            for l in it:
+                # try parsing all lines that don't start with "# @"
+                if re.match(r"^#\s*@.*$", l):
+                    break
+                _, memail = email.utils.parseaddr(l.removeprefix("#"))
+                if not memail:
+                    break
+                eclass_maintainers.append(memail)
+            return eclass_maintainers, False
+    except OSError:
+        return [], True
+
+
+def get_pkg_emails(ppath: Path):
+    try:
+        metadata_xml = lxml.etree.parse(ppath / "metadata.xml")
+        return [
+            m.findtext("email").strip()
+            for m in metadata_xml.getroot()
+            if m.tag == "maintainer"
+        ], False
+    except OSError:
+        return [], True
 
 
 def delete_old_assignment(repo, pr_id, codeberg_username):
@@ -197,7 +229,7 @@ def assign_one(
     files = repo.files(pr_id)
 
     # look through files in the PR to determine the areas affected
-    areas, packages, metadata_xml_files = scanfiles(files, categories)
+    areas, packages, metadata_xml_files, eclasses = scanfiles(files, categories)
 
     # Begin building our comment...
 
@@ -205,7 +237,8 @@ def assign_one(
 
 *Submitter*: @{pr_submitter}
 *Areas affected*: {", ".join(sorted(areas)) or "(none, wtf?)"}
-*Packages affected*: {", ".join(sorted(packages)[:5]) or "(none)"}{", ..." if len(packages) > 5 else ""}
+*Eclasses affected*: {", ".join(e.name for e in eclasses[:5]) or "(none)"}{", ..." if len(eclasses) > 5 else ""}
+*Packages affected*: {", ".join(str(p) for p in packages[:5]) or "(none)"}{", ..." if len(packages) > 5 else ""}
 """
 
     # At least one of the listed packages is maintained entirely by
@@ -224,57 +257,44 @@ def assign_one(
     reviewers = set()
     team_reviewers = set()
 
-    # TODO Try to determine unique set of maintainers
-    if packages:
-        pkg_maints = {}
-        for p in packages:
-            ppath = ref_repo_path / p / "metadata.xml"
-            try:
-                metadata_xml = lxml.etree.parse(ppath)
-            except (OSError, IOError):
-                pkg_maints[p] = ["@gentoo/proxy-maint (new package)"]
+    if eclasses or packages:
+        maint_lines = []
+        for p in chain(eclasses, packages):
+            is_eclass = p.suffix == ".eclass"
+            ppath = ref_repo_path / p
+            all_ms = []
+            emails, is_new = (
+                get_eclass_emails(ppath) if is_eclass else get_pkg_emails(ppath)
+            )
+
+            if is_new:
+                all_ms = ["@gentoo/proxy-maint (new package)"]
                 team_reviewers.add("proxy-maint")
                 new_package = True
-            else:
+
+            for memail in emails:
                 existing_package = True
-                all_ms = []
-                for m in metadata_xml.getroot():
-                    if m.tag != "maintainer":
-                        continue
-                    memail = m.findtext("email").strip()
-                    totally_all_maints.add(memail)
-                    # map the maintainer to their codeberg handle
-                    # mapping is email -> codeberg handle
-                    if m.get("type") == "project":
-                        ms, team = map_proj(memail, proj_mapping)
-                        if team is not None:
-                            team_reviewers.add(team)
-                    else:
-                        ms, user = map_dev(memail, dev_mapping)
-                        if user not in (None, pr_submitter):
-                            reviewers.add(user)
+                totally_all_maints.add(memail)
+                ms, reviewer = map_email(memail.lower(), dev_mapping, proj_mapping)
+                if reviewer:
+                    if ms.startswith("@gentoo/"):
+                        team_reviewers.add(reviewer)
+                    elif reviewer != pr_submitter:
+                        reviewers.add(reviewer)
+                all_ms.append(ms)
 
-                    for subm in m:
-                        if m.tag == "description" and m.get("lang", "en") == "en":
-                            ms += f"({m.text})"
-                    all_ms.append(ms)
-
-                if all_ms:
-                    # no codebergers? no good
-                    cant_assign = not (any("@" in m for m in all_ms))
-
-                    pkg_maints[p] = all_ms
-
-                    if f"@{pr_submitter}" not in all_ms:
-                        self_maintained = False
-                    unique_maints.add(tuple(sorted(all_ms)))
-                    if len(unique_maints) > assignee_limit:
-                        break
-                else:
-                    # maintainer-needed!
-                    pkg_maints[p] = ["@gentoo/proxy-maint (maintainer needed)"]
-                    team_reviewers.add("proxy-maint")
-                    maint_needed = True
+            if all_ms:
+                # no codebergers? no good
+                cant_assign = not any("@" for m in all_ms)
+                if f"@{pr_submitter}" not in all_ms:
+                    self_maintained = False
+                unique_maints.add(tuple(sorted(all_ms)))
+            elif not is_new:
+                # maintainer-needed!
+                all_ms = ["@gentoo/proxy-maint (maintainer needed)"]
+                team_reviewers.add("proxy-maint")
+                maint_needed = True
+            maint_lines.append((p.name if is_eclass else str(p), all_ms))
 
         if len(unique_maints) > assignee_limit:
             cant_assign = True
@@ -282,8 +302,8 @@ def assign_one(
             reviewers.clear()
             team_reviewers.clear()
         else:
-            for p in sorted(packages):
-                body += f"\n**{p}**: {', '.join(pkg_maints[p])}"
+            for p, maints in maint_lines:
+                body += f"\n**{p}**: {', '.join(maints)}"
             if cant_assign:
                 body += "\n\nAt least one of the listed packages is maintained entirely by non-Codeberg developers!"
     else:
