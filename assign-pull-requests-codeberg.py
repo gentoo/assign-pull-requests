@@ -7,13 +7,13 @@ import socket
 import email.utils
 import json
 import os
-import os.path
 import sys
 import re
 import lxml.etree
 import urllib.request
 import urllib.error
 import xmlrpc.client as xmlrpcclient
+from pathlib import Path
 
 from codebergapi import CodebergAPI
 
@@ -228,7 +228,7 @@ def assign_one(
     if packages:
         pkg_maints = {}
         for p in packages:
-            ppath = os.path.join(ref_repo_path, p, "metadata.xml")
+            ppath = ref_repo_path / p / "metadata.xml"
             try:
                 metadata_xml = lxml.etree.parse(ppath)
             except (OSError, IOError):
@@ -444,6 +444,7 @@ def main(repo_path):
     CODEBERG_USERNAME = os.environ["CODEBERG_USERNAME"]
     CODEBERG_TOKEN_FILE = os.environ["CODEBERG_TOKEN_FILE"]
     (owner, repo) = os.environ["CODEBERG_REPO"].split("/")
+    repo_path = Path(repo_path)
 
     with open(CODEBERG_TOKEN_FILE) as f:
         token = f.read().strip()
@@ -462,7 +463,7 @@ def main(repo_path):
         dev_mapping.update(json.load(f))
     with open(CODEBERG_PROJ_MAPPING) as f:
         proj_mapping = json.load(f)
-    with open(os.path.join(repo_path, "profiles/categories")) as f:
+    with open(repo_path / "profiles" / "categories") as f:
         categories = [l.strip() for l in f.read().splitlines()]
 
     with CodebergAPI(owner, repo, token) as repo:
@@ -470,6 +471,7 @@ def main(repo_path):
         label_mapping = {l["name"]: l["id"] for l in repo.labels()}
 
         for pr in pulls:
+            return
             assign_one(
                 repo,
                 pr,
