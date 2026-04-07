@@ -11,7 +11,8 @@ import os.path
 import sys
 import re
 import lxml.etree
-import urllib.request as urllib
+import urllib.request
+import urllib.error
 import xmlrpc.client as xmlrpcclient
 
 from codebergapi import CodebergAPI
@@ -296,10 +297,10 @@ def assign_one(
     # maintainers for invalid addresses too
     # TODO: report maintainer change diffs
     for mxml in metadata_xml_files:
-        with urllib.urlopen(mxml) as f:
-            try:
+        try:
+            with urllib.request.urlopen(mxml) as f:
                 metadata_xml = lxml.etree.parse(f)
-            except lxml.etree.XMLSyntaxError:
+        except (lxml.etree.XMLSyntaxError, urllib.error.HTTPError):
                 continue
         for m in metadata_xml.getroot():
             if m.tag == "maintainer":
