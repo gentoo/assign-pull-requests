@@ -279,7 +279,8 @@ def assign_one(
         if len(unique_maints) > assignee_limit:
             cant_assign = True
             body += "\n@gentoo/codeberg: Too many disjoint maintainers, disabling auto-assignment."
-            team_reviewers.add("codeberg")
+            reviewers.clear()
+            team_reviewers = {"codeberg"}
         else:
             for p in sorted(packages):
                 body += f"\n**{p}**: {', '.join(pkg_maints[p])}"
@@ -288,7 +289,6 @@ def assign_one(
     else:
         cant_assign = True
         body += "\n@gentoo/codeberg"
-        team_reviewers.add("codeberg")
 
     if len(unique_maints) > assignee_limit:
         totally_all_maints = set()
@@ -383,9 +383,10 @@ def assign_one(
 
     # finally! post comment...
     repo.create_comment(pr_id, body)
-    repo.request_review(
-        pr_id, reviewers=list(reviewers), team_reviewers=list(team_reviewers)
-    )
+    if reviewers or team_reviewers:
+        repo.request_review(
+            pr_id, reviewers=list(reviewers), team_reviewers=list(team_reviewers)
+        )
 
     updated_labels = []
     for l in pr["labels"]:
