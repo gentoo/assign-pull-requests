@@ -280,7 +280,7 @@ def assign_one(
             cant_assign = True
             body += "\n@gentoo/codeberg: Too many disjoint maintainers, disabling auto-assignment."
             reviewers.clear()
-            team_reviewers = {"codeberg"}
+            team_reviewers.clear()
         else:
             for p in sorted(packages):
                 body += f"\n**{p}**: {', '.join(pkg_maints[p])}"
