@@ -301,7 +301,7 @@ def assign_one(
             with urllib.request.urlopen(mxml) as f:
                 metadata_xml = lxml.etree.parse(f)
         except (lxml.etree.XMLSyntaxError, urllib.error.HTTPError):
-                continue
+            continue
         for m in metadata_xml.getroot():
             if m.tag == "maintainer":
                 totally_all_maints.add(m.findtext("email").strip())
