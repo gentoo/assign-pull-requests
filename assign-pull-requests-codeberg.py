@@ -353,7 +353,7 @@ def assign_one(
                 )
             else:
                 updq = bz.build_update(
-                    keywords_add=["PullRequest"], see_also_add=[pr["url"]]
+                    keywords_add=["PullRequest"], see_also_add=[pr["html_url"]]
                 )
                 try:
                     bz.update_bugs([bug.id for bug in real_bugs], updq)
