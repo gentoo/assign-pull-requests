@@ -271,9 +271,10 @@ def assign_one(
                 all_ms = ["@gentoo/proxy-maint (new package)"]
                 team_reviewers.add("proxy-maint")
                 new_package = True
+            else:
+                existing_package = True
 
             for memail in emails:
-                existing_package = True
                 totally_all_maints.add(memail)
                 ms, reviewer = map_email(memail.lower(), dev_mapping, proj_mapping)
                 if reviewer:
